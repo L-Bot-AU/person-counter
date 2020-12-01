@@ -16,7 +16,7 @@ from conn_server import StubConnServer as ConnServer
 #from conn_server import ConnServer
 
 # magic values
-MIN_AREA = 6000 # 0 <= MIN_AREA <= width*height                     minimum pixel area to be considered as a person - affected by camera height
+MIN_AREA = 2500 # 0 <= MIN_AREA <= width*height                     minimum pixel area to be considered as a person - affected by camera height
 SENSITIVITY = 55 # 0 <= SENSITIVITY < 255                           affected by lighting / shaddows
 THRESHOLD_WIDTH = 8 # 0 <= THRESHOLD_WIDTH < height//2              width of border
 
@@ -66,7 +66,7 @@ def track(prev, new):
 
 class Main(Handler):
     def __init__(self, cap, isThreaded=True, isStepped=False):
-        super().__init__(cap, "yeet", isThreaded, isStepped)
+        super().__init__(cap, "IZONE", isThreaded, isStepped)
         # initialise
         _, self.referenceFrame = getFrame(self.cap.read()[1])
         self.numUp, self.numDown = 0, 0
@@ -123,15 +123,16 @@ class Main(Handler):
             for point1, point2 in self.traceDebug:
                 cv2.circle(display, point1, 1, (0, 0, 255), 1)
                 cv2.line(display, point1, point2, (0, 255, 0), 1)
-            
+            cv2.imshow("Thresh", thresh)
+            cv2.waitKey(0)
         return display
 
 if __name__ == "__main__":
     # use either video stream of camera stream for image input
     #video = "concept_test/multiple_1.mp4"
-    video = "real_test/comben_1.mp4"
+    video = "real_test/two_1.mp4"
     cap = cv2.VideoCapture(video)
-    #cap = cv2.VideoCapture(0)
+    #cap = cv2.VideoCapture(2)
     
     m = Main(cap, isThreaded=False)
     m.start()

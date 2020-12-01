@@ -147,7 +147,7 @@ class Main(Handler):
 
 if __name__ == "__main__":
     # use either video stream of camera stream for image input
-    video = "real_test/comben_1.mp4"
+    video = "real_test/two_1.mp4"
     #video = "concept_test/fast_1.mp4"
     cap = cv2.VideoCapture(video)
     #cap = cv2.VideoCapture(2)

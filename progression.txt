@@ -1,0 +1,7 @@
+detect try 0.py - copy paste, rough proof of concept
+detect try 1.py - new copy paste, tried MOSSE tracking
+detect try 2.py - concept_test
+detect try 3.py - real_test_0, using utilities.Handler
+detect try 4.py - real_test_0, but with 1 person to account for blurry, MAX_DIST_PER_FRAME
+detect try 5.py - real_test_1, CENTER, focusuf, MIN_DIST_PER_FRAME - works reliably SLB! (white shirt, blazer, fast, jiggle, multiple)
+detect try 6.py - real_test_1, tried optical flow

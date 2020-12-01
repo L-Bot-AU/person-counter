@@ -9,7 +9,12 @@ from multiprocessing.pool import ThreadPool
 from collections import deque
 import imutils
 import subprocess
+import math
 
+def distance(p0, p1):
+    """euclidian distanced between 2 coordinates"""
+    return math.sqrt((p0[0] - p1[0])**2 + (p0[1] - p1[1])**2)
+        
 def clock():
     return cv2.getTickCount() / cv2.getTickFrequency()
 
@@ -26,7 +31,6 @@ class DummyTask:
     def get(self):
         return self.data
 
-# disable autofocus
 def runCmd(cmd):
     print(subprocess.getoutput(cmd.split(" ")))
     
@@ -40,6 +44,7 @@ class Handler:
         self.isStepped = isStepped
         self.stopped = False
         
+        # disable autofocus
         if not CAMERA_NAME:
             runCmd("focusuf\\FocusUF.exe --list-cameras")
             raise Exception("select a camera")
@@ -62,10 +67,12 @@ class Handler:
         draw_str(frame, f"{round(fps, 2)} frames/s", (20, 40))
         cv2.imshow("video", frame)
         
-        
         # if the `q` key is pressed, break from the loop
-        if not self.isStepped and cv2.waitKey(1) & 0xFF == ord("q"):
-            self.stop()
+        if not self.isStepped:
+            k = cv2.waitKey(1)
+            if k == ord("q"): self.stop()
+            elif k == ord("p"): cv2.waitKey(-1)
+            
         if self.isStepped:
             cv2.waitKey(0)
 

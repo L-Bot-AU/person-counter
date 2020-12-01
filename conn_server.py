@@ -1,7 +1,7 @@
 import socket
 import random
 from Crypto.Cipher import AES
-
+import winsound
 
 class ConnServer:
     def __init__(self, SERVER_IP="127.0.0.1", PORT=4485):
@@ -32,7 +32,9 @@ class StubConnServer:
 
     def add(self, n):
         self.send("+"+str(n))
+        winsound.Beep(1000, 200)
 
     def sub(self, n):
         self.send("-"+str(n))
+        winsound.Beep(500, 200)
 
