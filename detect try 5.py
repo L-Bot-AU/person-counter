@@ -17,7 +17,7 @@ from conn_server import StubConnServer as ConnServer
 
 # magic values SNR
 # [0..width*height]     minimum no. pixel of a person - affected by camera height
-MIN_AREA = 6000
+MIN_AREA = 9000
 # [0..255)              affected by lighting / shaddows
 SENSITIVITY = 55
 # [0..height//2)        width of border
@@ -53,6 +53,8 @@ DEBUG = True"""
 
 # any substring of string name. check names using FocusUF-master\win32\focusuf\FocusUF.exe --list-cameras
 CAMERA_NAME = "IZONE"
+
+# consts
 INF = float("inf")
 
 class Main(Handler):
@@ -166,9 +168,9 @@ class Main(Handler):
 if __name__ == "__main__":
     # use either video stream of camera stream for image input
     #video = "concept_test/multiple_1.mp4"
-    video = "real_test_1/two_2.mp4"
-    cap = cv2.VideoCapture(video)
-    #cap = cv2.VideoCapture(2)
+    video = "real_test_1/two_1.mp4"
+    #cap = cv2.VideoCapture(video)
+    cap = cv2.VideoCapture(2)
     
     m = Main(cap, isStepped=False)
     m.start()
