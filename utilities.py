@@ -2,13 +2,15 @@ import cv2
 import imutils
 import math
 import subprocess
+import threading
 
 PROCESSING_RES = 720
 DISPLAY_RES = 480
 
 def distance(p0, p1):
-    """euclidian distanced between 2 coordinates"""
-    return math.sqrt((p0[0] - p1[0])**2 + (p0[1] - p1[1])**2)
+    """euclidian distance between 2 coordinates"""
+    d0, d1 = p0[0] - p1[0], p0[1] - p1[1]
+    return math.sqrt(d0*d0 + d1*d1)
 
 def avgPoint(p0, p1):
     return (p0[0] + p1[0]) // 2, (p0[1] + p1[1]) // 2
@@ -44,11 +46,24 @@ class Handler:
             raise Exception("select a camera")
         runCmd(f"focusuf\\FocusUF.exe --camera-name {CAMERA_NAME} --focus-mode-manual --exposure-mode-manual")
         
+        self.currFrame = None
+        """t = threading.Thread(target=self.loadFrames)
+        t.daemon = True
+        t.start()"""
+
+    def loadFrames(self):
+        while True:
+            ret, self.currFrame = self.cap.read()
+            if not ret or self.currFrame is None:
+                return
+            self.currFrame = imutils.resize(self.currFrame, height=PROCESSING_RES) # 720p resolution
+    
     def read(self):
-        ret, frame = self.cap.read()
-        if not ret or frame is None:
-            return None
-        return imutils.resize(frame, height=PROCESSING_RES) # 720p resolution
+        ret, self.currFrame = self.cap.read()
+        if not ret or self.currFrame is None:
+            self.stop()
+        self.currFrame = imutils.resize(self.currFrame, height=PROCESSING_RES) # 720p resolution
+        return self.currFrame
     
     def imshow(self, windowName, frame):
         cv2.imshow(windowName, imutils.resize(frame, height=DISPLAY_RES))
@@ -68,12 +83,8 @@ class Handler:
         if not self.isStepped and k == ord("p"):
             cv2.waitKey(-1)
 
-    def push(self):
-        frame = self.read()
-        if frame is None:
-            self.stop()
-        else:
-            return self.processFrame(frame)
+    def push(self, frame):
+        return self.processFrame(frame)
         
     def start(self):
         """start the stream"""
@@ -83,8 +94,9 @@ class Handler:
             raise AttributeError("create self.processFrame(frame, t) which returns (display_frame, t)")
         
         while not self.stopped:
+            frame = self.read()
             t0 = clock()
-            frame = self.push()
+            frame = self.push(frame)
             t1 = clock()
             
             self.pop(frame, t1 - t0)
@@ -132,7 +144,7 @@ def fpsTest(cap):
     
 if __name__ == '__main__':
     # an example of how to use this
-    """class Testing(Handler):
+    class Testing(Handler):
         #self.processFrame(frame, t) has to return (display_frame, t)
         def processFrame(self, frame):
             # processing goes here
@@ -141,9 +153,9 @@ if __name__ == '__main__':
             return frame
 
     cap = cv2.VideoCapture("concept_test/jiggle_1.mp4")
-    h = Testing(cap, isStepped=1)
-    h.start()"""
+    h = Testing(cap, isStepped=0)
+    h.start()
     
-    cap = cv2.VideoCapture(2) # this takes a long time for c922
-    fpsTest(cap)
+    """cap = cv2.VideoCapture(2) # this takes a long time for c922
+    fpsTest(cap)"""
 

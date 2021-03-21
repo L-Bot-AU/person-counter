@@ -101,13 +101,14 @@ given a BW image, find centroids of possible people"""
                 x, y, w, h = cv2.boundingRect(c)
                 centroids.append((cv2.contourArea(c), (x+w//2, y+h//2)))
                 
-        centroids = [i[1] for i in sorted(centroids, reverse=True)][:MAX_CENTROIDS]
+        centroids = [i[1] for i in sorted(centroids, reverse=True)[:MAX_CENTROIDS]]
         
-        # if two centroids is too close, they are the left and right side of a person's shoulders (head not detected)
+        # if 2 centroids is too close, they are the left and right side of a person's shoulders (e.g. head not detected)
         # thus, consider as 1 centroid (take average of points)
+        # if more than 2 centroids are too close, the order of taking averages matters, but I have ignored that detail
         for i in range(len(centroids)):
             for j in range(i+1, len(centroids)):
-                if distance(centroids[i], centroids[j]) < MAX_DIST_PER_FRAME:
+                if distance(centroids[i], centroids[j]) <= MAX_DIST_PER_FRAME:
                     centroids[i] = avgPoint(centroids[i], centroids[j])
                     del centroids[j]
         return centroids
@@ -217,7 +218,7 @@ if __name__ == "__main__":
     # use either video stream of camera stream for image input
     # 1 works
     #video = "real_test_4/3.mp4"
-    video = "video013.mp4"
+    video = "real_test_5/video013.mp4"
     """#cap = cv2.VideoCapture(video)
     print("initialising camera")
     cap = cv2.VideoCapture(CAMERA_PORT)
