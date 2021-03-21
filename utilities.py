@@ -8,7 +8,7 @@ DISPLAY_RES = 480
 
 def distance(p0, p1):
     """euclidian distanced between 2 coordinates"""
-    return math.sqrt((p0[0] - p1[0])**2 + (p0[1] - p1[1])**2)
+    return math.sqrt( (p0[0] - p1[0])*(p0[0] - p1[0]) + (p0[1] - p1[1])*(p0[1] - p1[1]) )
 
 def avgPoint(p0, p1):
     return (p0[0] + p1[0]) // 2, (p0[1] + p1[1]) // 2
