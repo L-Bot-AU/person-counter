@@ -21,3 +21,4 @@ detect significant countours, identify centroids
 track between frames: minimum sum of distances between prev and new centroids
 
 (NOTE: standard object trackers don't work well)
+
