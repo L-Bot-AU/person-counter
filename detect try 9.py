@@ -9,6 +9,7 @@ import numpy as np
 import random
 from utilities import Handler, draw_str, distance, avgPoint
 from conn_server import StubConnServer as ConnServer
+import time
 #from conn_server import ConnServer
 
 
@@ -35,11 +36,11 @@ INF = float("inf")
 # {True, False}         whether to display frame + annotations of centroids, traces
 DEBUG = True
 # [1..inf)              max number of people in frame
-MAX_CENTROIDS = 2
+MAX_CENTROIDS = 3
 # [0..inf)              minimum points required for count to happen
 CONFIDENCE = 3
 # [0..1]                threshold position (normalised distance to top)
-CENTER = 0.65
+CENTER = 0.45
 # [0..1]                width of border
 THRESHOLD_WIDTH = 0
 
@@ -47,6 +48,7 @@ THRESHOLD_WIDTH = 0
 CAMERA_NAME, CAMERA_PORT = "c922 Pro Stream Webcam", 1
 #CAMERA_NAME, CAMERA_PORT = "Microsoft Camera Front", 0
 #CAMERA_NAME, CAMERA_PORT = "Microsoft Camera Rear", 1
+
 def genColour(seed):
     random.seed(seed)
     return (
@@ -82,10 +84,10 @@ updates database from self.server"""
         self.prevCentroids = []
         self.trails = []
         self.server = ConnServer()
-
+    
     def prepareFrame(self, rawFrame):
         return cv2.GaussianBlur(rawFrame, (5, 5), 0)[:, L:self.width-R]
-        
+    
     def getCentroids(self, thresh):
         """\
 given a BW image, find centroids of possible people"""
@@ -101,18 +103,17 @@ given a BW image, find centroids of possible people"""
                 x, y, w, h = cv2.boundingRect(c)
                 centroids.append((cv2.contourArea(c), (x+w//2, y+h//2)))
                 
-        centroids = [i[1] for i in sorted(centroids, reverse=True)[:MAX_CENTROIDS]]
+        centroids = [i[1] for i in sorted(centroids, reverse=True)][:MAX_CENTROIDS]
         
-        # if 2 centroids is too close, they are the left and right side of a person's shoulders (e.g. head not detected)
+        # if two centroids is too close, they are the left and right side of a person's shoulders (head not detected)
         # thus, consider as 1 centroid (take average of points)
-        # if more than 2 centroids are too close, the order of taking averages matters, but I have ignored that detail
         for i in range(len(centroids)):
             for j in range(i+1, len(centroids)):
-                if distance(centroids[i], centroids[j]) <= MAX_DIST_PER_FRAME:
+                if max(i, j) < len(centroids) and distance(centroids[i], centroids[j]) < MAX_DIST_PER_FRAME:
                     centroids[i] = avgPoint(centroids[i], centroids[j])
                     del centroids[j]
         return centroids
-
+    
     def track(self, prev, new):
         """\
 find pairing of the sets of points (prev_i, new_i) which satify:
@@ -140,7 +141,6 @@ find pairing of the sets of points (prev_i, new_i) which satify:
                 if len(curr) > len(bestI) or cost <= best:
                     best = cost
                     bestI = curr
-        
         return bestI
     
     def getTrails(self, links):
@@ -153,10 +153,11 @@ updates self.trails from links"""
                     newTrails.append(self.trails[i] + [point2])
                     break
             else:
+                # trail can only start outside boundary range
                 if point1[1] > self.downThresh or point1[1] < self.upThresh:
                     newTrails.append([point1, point2])
         self.trails = newTrails
-        
+    
     def processFrame(self, display):
         """\
 given the frame, count poeple entering `server.add` and exiting `server.sub`"""
@@ -182,8 +183,9 @@ given the frame, count poeple entering `server.add` and exiting `server.sub`"""
         # for each centroid, find the previous coordinate it was at
         links = self.track(self.prevCentroids, centroids)
         #print(self.prevCentroids, centroids, links)
-        self.getTrails(links)
         self.prevCentroids = centroids
+        if DEBUG:
+            self.getTrails(links)
         
         # detect people crossing threshold
         for trail in self.trails:
@@ -208,7 +210,7 @@ given the frame, count poeple entering `server.add` and exiting `server.sub`"""
                     cv2.circle(display, point1, 1, (255, 0, 0), 5)
                     cv2.line(display, point1, point2, genColour(trails[0]), 3)
 
-            #frameDelta[np.all(frameDelta == (0, 0, 0), axis=-1)] = (0, 255, 0)
+            #frameDelta[np.all(frameDelta == (0, 0, 0), axis=-1)] = (0, 255, 0) #greeeen
             self.imshow("frameDelta", frameDelta)
             self.imshow("Thresh", thresh)
             
@@ -218,16 +220,15 @@ if __name__ == "__main__":
     # use either video stream of camera stream for image input
     # 1 works
     #video = "real_test_4/3.mp4"
-    video = "real_test_5/video013.mp4"
-    """#cap = cv2.VideoCapture(video)
-    print("initialising camera")
-    cap = cv2.VideoCapture(CAMERA_PORT)
-    print("config 1")
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-    print("config 2")
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)"""
-    
+    #video = "real_test_5/video013.mp4"
+    video = "Camera Roll/video017.mp4"
     cap = cv2.VideoCapture(video)
+    """print("initialising camera")
+    cap = cv2.VideoCapture(CAMERA_PORT, cv2.CAP_DSHOW)
+    print("config 1")
+    #cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+    print("config 2")
+    #cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)"""
+    
     m = Main(cap, CAMERA_NAME, isStepped=0)
     m.start()
-

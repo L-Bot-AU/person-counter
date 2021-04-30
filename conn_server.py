@@ -3,6 +3,7 @@ import random
 #from Crypto.Cipher import AES
 import threading
 import winsound
+import time
 
 SERVER_IP = "192.168.137.1"
 JNRCONNECT_PORT = 9482
@@ -45,8 +46,8 @@ class StubConnServer:
         self.total = 0
         
     def send(self, msg):
-        #print(f"Sending: '{msg}'")
-        print(self.total)
+        print(f"Sending: '{msg}'")
+        open("data.txt", "a").write(str(self.total) + " " + time.ctime() + "\n")
 
     def add(self, n : int):
         #threading.Thread(target=winsound.Beep, args=(440, 1000)).start()
