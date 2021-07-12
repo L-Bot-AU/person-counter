@@ -1,15 +1,9 @@
-"""
-TODO:
-cv2.BackgroundSubtractor
-"""
-
 ########## imports ##########
-import imutils, cv2, itertools
-import numpy as np
-import random
-from utilities import Handler, draw_str, distance, avgPoint
+from utilities import Handler, draw_str, distance, avgPoint, genColour
 from conn_server import StubConnServer as ConnServer
-import time
+import itertools
+import imutils
+import cv2
 #from conn_server import ConnServer
 
 
@@ -49,36 +43,33 @@ CAMERA_NAME, CAMERA_PORT = "c922 Pro Stream Webcam", 1
 #CAMERA_NAME, CAMERA_PORT = "Microsoft Camera Front", 0
 #CAMERA_NAME, CAMERA_PORT = "Microsoft Camera Rear", 1
 
-def genColour(seed):
-    random.seed(seed)
-    return (
-        random.randint(0, 255),
-        random.randint(0, 255),
-        random.randint(0, 255)
-    )
 
 ########## processing frame ##########
 class Main(Handler):
     """\
-Contains various functions for processing image to detect library enters/exits
-self.processFrame should be called externally and provided each frame from camera / video stream
+contains various functions for processing image to detect library enters/exits
+self.processFrame is called by super() and provided each frame from the camera / video stream
 updates database from self.server"""
     
-    def __init__(self, cap, CAMERA_NAME, isStepped=False):
-        super().__init__(cap, CAMERA_NAME, isStepped=isStepped)
+    def __init__(self, cap, CAMERA_NAME, isStepped=False, seekTime=None):
+        """\
+:param cap: cv2.VideoCapture object
+:param CAMERA_NAME: camera name e.g. "c922 Pro Stream Webcam"
+:param isStepped: debugger flag indicating whether you progress through frames one at a time on keypress
+:param seekTime: jump to a particular time in the video (in seconds)
+:return: None
+
+initialises referenceFrame"""
+        
+        super().__init__(cap, CAMERA_NAME, isStepped=isStepped, seekTime=None)
         
         # compute thresholds for counting enters/exits
-        self.referenceFrame = self.read()
-        
-        # for debugging to seek to a particular time in video
-        #cap.set(cv2.CAP_PROP_POS_MSEC, (60*2+24)*1000)
-        
-        self.height, self.width, _ = self.referenceFrame.shape
+        self.height, self.width, _ = self.read().shape
         self.upThresh = int(self.height*(CENTER - THRESHOLD_WIDTH))
         self.downThresh = int(self.height*(CENTER + THRESHOLD_WIDTH))
         
         # first frame
-        self.referenceFrame = self.prepareFrame(self.referenceFrame)
+        self.referenceFrame = self.prepareFrame(self.read())
         
         # initialise variables
         self.prevCentroids = []
@@ -86,11 +77,15 @@ updates database from self.server"""
         self.server = ConnServer()
     
     def prepareFrame(self, rawFrame):
+        """\
+:param rawFrame: image
+:return: image after the required transformations, only this image is used and processed"""
         return cv2.GaussianBlur(rawFrame, (5, 5), 0)[:, L:self.width-R]
     
     def getCentroids(self, thresh):
         """\
-given a BW image, find centroids of possible people"""
+:param thresh: BW image
+:return: the centroids of all countours which have area >= MIN_AREA, sorted by decreasing area. close centroids are merged together"""
         
         centroids = []
         contours = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -116,11 +111,12 @@ given a BW image, find centroids of possible people"""
     
     def track(self, prev, new):
         """\
-find pairing of the sets of points (prev_i, new_i) which satify:
- - prev_i in prev
- - new_i in new
+:param prev: list of points representing centroids of the previous frame, sorting by decreasing area
+:param new: list of points representing centroids of the current frame, sorting by decreasing area
+:return: list of optimal pairs of points from prev to new such that:
  - all euclidean distances <= MAX_DIST_PER_FRAME
- - sum of euclidean distances is minimised"""
+ - sum of euclidean distances is minimised
+ - order of points is as similar as possible to its input order"""
         #print(prev, new)
         # highly inefficent, but like... did anyone ask?
         best = INF
@@ -143,9 +139,12 @@ find pairing of the sets of points (prev_i, new_i) which satify:
                     bestI = curr
         return bestI
     
-    def getTrails(self, links):
+    def updateTrails(self, links):
         """\
-updates self.trails from links"""
+:param links: list of pairs of points
+:return: None
+
+extends self.trails from links, or remove the trail if it doesn't exist anymore"""
         newTrails = []
         for point1, point2 in links:
             for i in range(len(self.trails)):
@@ -157,10 +156,31 @@ updates self.trails from links"""
                 if point1[1] > self.downThresh or point1[1] < self.upThresh:
                     newTrails.append([point1, point2])
         self.trails = newTrails
+        
+    def sendCount(self):
+        """\
+:param self.trails: list of list of points
+:return: None
+
+uses self.trails to detect when a centroid has just crossed the boundary
+depending on its direction, sends an add(1) or sub(1) to the server"""
+        
+        for trail in self.trails:
+            # if trail is long enough to be considered more than "noise"
+            if len(trail) >= CONFIDENCE:
+                point1, point2 = trail[-2], trail[-1]
+                # centroid of person went past the upper threshold (exiting library)
+                if point1[1] > self.upThresh >= point2[1]: self.server.sub(1)
+                
+                # centroid of person went past the lower threshold (entering library)
+                if point1[1] < self.downThresh <= point2[1]: self.server.add(1)
     
     def processFrame(self, display):
         """\
-given the frame, count poeple entering `server.add` and exiting `server.sub`"""
+:param display: image
+:return: display image for debugging screen
+
+count poeple entering and exiting"""
         
         # grab the current frame
         frameDelta = cv2.subtract(
@@ -184,19 +204,10 @@ given the frame, count poeple entering `server.add` and exiting `server.sub`"""
         links = self.track(self.prevCentroids, centroids)
         #print(self.prevCentroids, centroids, links)
         self.prevCentroids = centroids
-        if DEBUG:
-            self.getTrails(links)
+        self.updateTrails(links)
         
-        # detect people crossing threshold
-        for trail in self.trails:
-            # if trail is long enough to be considered more than "noise"
-            if len(trail) >= CONFIDENCE:
-                point1, point2 = trail[-2], trail[-1]
-                # centroid of person went past the upper threshold (exiting library)
-                if point1[1] > self.upThresh >= point2[1]: self.server.sub(1)
-                
-                # centroid of person went past the lower threshold (entering library)
-                if point1[1] < self.downThresh <= point2[1]: self.server.add(1)
+        # detect people crossing threshold, and send to server
+        self.sendCount()
         
         if DEBUG:
             # draw tihe threshold line for entering or exiting the library
@@ -220,8 +231,8 @@ if __name__ == "__main__":
     # use either video stream of camera stream for image input
     # 1 works
     #video = "real_test_4/3.mp4"
-    #video = "real_test_5/video013.mp4"
-    video = "Camera Roll/video017.mp4"
+    video = "real_test_5/video013.mp4"
+    #video = "Camera Roll/video017.mp4"
     cap = cv2.VideoCapture(video)
     """print("initialising camera")
     cap = cv2.VideoCapture(CAMERA_PORT, cv2.CAP_DSHOW)
@@ -229,6 +240,6 @@ if __name__ == "__main__":
     #cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
     print("config 2")
     #cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)"""
-    
-    m = Main(cap, CAMERA_NAME, isStepped=0)
+    print(Main.__doc__)
+    m = Main(cap, CAMERA_NAME, isStepped=False, seekTime=None)
     m.start()
