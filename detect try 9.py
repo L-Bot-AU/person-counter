@@ -1,10 +1,8 @@
 ########## imports ##########
-from utilities import Handler, draw_str, distance, avgPoint, genColour
-from conn_server import StubConnServer as ConnServer
+from utilities import distance, avgPoint, genColour, Handler
 import itertools
 import imutils
 import cv2
-#from conn_server import ConnServer
 
 
 ##########  magic values - senior library ##########
@@ -19,11 +17,6 @@ SENSITIVITY1 = 30
 SENSITIVITY2 = 30
 # [0..width+height)     max distance traversed by centroid - affected by camera height
 MAX_DIST_PER_FRAME = 300
-# [0..width-R]          left bound for process image crop
-L = 0
-# [L..width]            right bound of process image crop
-R = 0
-
 
 ########## consts ##########
 INF = float("inf")
@@ -51,36 +44,29 @@ contains various functions for processing image to detect library enters/exits
 self.processFrame is called by super() and provided each frame from the camera / video stream
 updates database from self.server"""
     
-    def __init__(self, cap, CAMERA_NAME, isStepped=False, seekTime=None):
-        """\
-:param cap: cv2.VideoCapture object
-:param CAMERA_NAME: camera name e.g. "c922 Pro Stream Webcam"
-:param isStepped: debugger flag indicating whether you progress through frames one at a time on keypress
-:param seekTime: jump to a particular time in the video (in seconds)
-:return: None
-
-initialises referenceFrame"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         
-        super().__init__(cap, CAMERA_NAME, isStepped=isStepped, seekTime=None)
+    def init(self, referenceFrame):
+        """\
+:param referenceFrame: the first frame in the video capture, should only contain backgroud
+:return: None"""
         
         # compute thresholds for counting enters/exits
-        self.height, self.width, _ = self.read().shape
+        self.referenceFrame = referenceFrame
+        self.height, self.width, _ = referenceFrame.shape
         self.upThresh = int(self.height*(CENTER - THRESHOLD_WIDTH))
         self.downThresh = int(self.height*(CENTER + THRESHOLD_WIDTH))
-        
-        # first frame
-        self.referenceFrame = self.prepareFrame(self.read())
         
         # initialise variables
         self.prevCentroids = []
         self.trails = []
-        self.server = ConnServer()
     
     def prepareFrame(self, rawFrame):
         """\
 :param rawFrame: image
 :return: image after the required transformations, only this image is used and processed"""
-        return cv2.GaussianBlur(rawFrame, (5, 5), 0)[:, L:self.width-R]
+        return cv2.GaussianBlur(rawFrame, (5, 5), 0)
     
     def getCentroids(self, thresh):
         """\
@@ -118,7 +104,6 @@ initialises referenceFrame"""
  - sum of euclidean distances is minimised
  - order of points is as similar as possible to its input order"""
         #print(prev, new)
-        # highly inefficent, but like... did anyone ask?
         best = INF
         bestI = []
         for combPrev in itertools.permutations(prev):
@@ -228,18 +213,9 @@ count poeple entering and exiting"""
         return display
 
 if __name__ == "__main__":
-    # use either video stream of camera stream for image input
-    # 1 works
-    #video = "real_test_4/3.mp4"
-    video = "real_test_5/video013.mp4"
-    #video = "Camera Roll/video017.mp4"
-    cap = cv2.VideoCapture(video)
-    """print("initialising camera")
-    cap = cv2.VideoCapture(CAMERA_PORT, cv2.CAP_DSHOW)
-    print("config 1")
-    #cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-    print("config 2")
-    #cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)"""
-    print(Main.__doc__)
-    m = Main(cap, CAMERA_NAME, isStepped=False, seekTime=None)
+    # source = "real_test_4/3.mp4"
+    source = "real_test_5/video013.mp4"
+    # source = 1 # front webcam
+    m = Main(source, CAMERA_NAME, debug=True, seekTime=0)
     m.start()
+

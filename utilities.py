@@ -1,23 +1,49 @@
+########## imports ##########
+from conn_server import StubConnServer as ConnServer
+#from conn_server import ConnServer
+
 import subprocess
 import random
 import imutils
 import math
 import cv2
 
+########## constants ##########
+# [0..width-R]          left bound for cropping image before being processed
+L = 0
+# [L..width]            right bound for cropping image before being processed
+R = 0
+# frames will be scaled to this resolution before being processed
 PROCESSING_RES = 720
+# frames will be scaled to this resolution before being displayed, should not be greater than PROCESSING_RES
 DISPLAY_RES = 480
 
+########## helper functions ##########
 def distance(p0, p1):
-    """euclidian distanced between 2 coordinates"""
+    """\
+:param p1: 2d coordinate as a tuple of integers
+:param p2: 2d coordinate as a tuple of integers
+:return: aeuclidian distanced between the 2 coordinates"""
     return math.sqrt((p0[0] - p1[0])*(p0[0] - p1[0]) + (p0[1] - p1[1])*(p0[1] - p1[1]))
 
 def avgPoint(p0, p1):
+    """\
+:param p1: 2d coordinate as a tuple of integers
+:param p2: 2d coordinate as a tuple of integers
+:return: midpoint of p1 and p2"""
     return (p0[0] + p1[0]) // 2, (p0[1] + p1[1]) // 2
 
 def clock():
+    """\
+:return: timestamp of the current frame"""
     return cv2.getTickCount() / cv2.getTickFrequency()
 
-def draw_str(frame, s, target):
+def draw_str(frame, s : str, target : (int, int)):
+    """\
+:param frame: image
+:param s: the string of text to write on the frame
+:param target: location of the text
+:return: None, the frame is changed in place"""
     x, y = target
     
     # shaddow
@@ -25,11 +51,18 @@ def draw_str(frame, s, target):
     # text
     cv2.putText(frame, s, (x, y), cv2.FONT_HERSHEY_PLAIN, 1.0, (255, 255, 255), lineType=cv2.LINE_AA)
 
-def runCmd(cmd):
+def runCmd(cmd : str):
+    """\
+:param cmd: command for the terminal
+:return: None, but prints the output of the command"""
     print(subprocess.getoutput(cmd.split(" ")))
 
+def genColour(seed : int):
+    """\
+:param seed: any integer
+:return: rgb value, represented as a tuple of 3 integers
 
-def genColour(seed):
+assigns a unique colour for every seed"""
     random.seed(seed)
     return (
         random.randint(0, 255),
@@ -37,12 +70,14 @@ def genColour(seed):
         random.randint(0, 255)
     )
 
+########## Handler ##########
 class Handler:
     """\
 wrapper for displaying and processing video
-handles the high level processing"""
+handles the high level processing
+use: `p` to toggle stepping mode and playthrough mode, ` ` to step, `q` to quit"""
     
-    def __init__(self, cap, CAMERA_NAME=None, isStepped=False, seekTime=None):
+    def __init__(self, source, CAMERA_NAME=None, debug=False, seekTime=None):
         """\
 :param cap: cv2.VideoCapture object
 :param CAMERA_NAME: camera name e.g. "c922 Pro Stream Webcam"
@@ -52,22 +87,42 @@ handles the high level processing"""
 
 initialises capture, set focus mode to auto
 """
+        try:
+            self.init
+        except AttributeError:
+            raise NameError("requires a function self.init(referenceFrame) which processes the first frame of the video capture")
+        try:
+            self.processFrame
+        except AttributeError:
+            raise NameError("requires a function self.processFrame(frame) which uses self.server to update the count, and return displayFrame")
         
         # initialise capture
-        self.cap = cap
+        self.cap = cv2.VideoCapture(source)
         self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, PROCESSING_RES)
         if seekTime:
-            cap.set(cv2.CAP_PROP_POS_MSEC, seekTime*1000)
-        self.isStepped = isStepped
-        self.stopped = False
-        
+            self.cap.set(cv2.CAP_PROP_POS_MSEC, seekTime*1000)
+            
         # set focus mode to auto
-        if not CAMERA_NAME and type(cap) != cv2.VideoCapture:
+        if not CAMERA_NAME:
             runCmd("focusuf\\FocusUF.exe --list-cameras")
             raise Exception("select a camera")
         runCmd(f"focusuf\\FocusUF.exe --camera-name {CAMERA_NAME} --focus-mode-manual --exposure-mode-manual")
-    
+        
+        # set debugging variables
+        self.debug = debug
+        self.isStepped = False
+        self.stopped = False
+                    
+        # initialise connection to server, to send a count as people enter/exit
+        self.server = ConnServer()
+
+        # initialise processes for subroutines
+        self.init(self.read())
+        
+    def togglePause(self, *args, **kwargs):
+        print(args, kwargs)
+        
     def read(self):
         """\
 :return: the most recent image captured from self.cap, scaled to PROCESSING_RES"""
@@ -75,7 +130,8 @@ initialises capture, set focus mode to auto
         ret, frame = self.cap.read()
         if not ret or frame is None:
             return None
-        return imutils.resize(frame, height=PROCESSING_RES) # 720p resolution
+        frame = imutils.resize(frame, height=PROCESSING_RES)
+        return frame[:, L:frame.shape[1]-R]
     
     def imshow(self, windowName, frame):
         """\
@@ -93,9 +149,10 @@ initialises capture, set focus mode to auto
 
 Deal with frame after self.processFrame"""
         
-        draw_str(frame, f"latency: {round(timeElapsed * 1000, 3)} ms", (20, 20))
-        draw_str(frame, f"{round(1 / timeElapsed, 3)} frames/s", (20, 40))
-        self.imshow("video", frame)
+        if self.debug:
+            draw_str(frame, f"latency: {round(timeElapsed * 1000, 3)} ms", (20, 20))
+            draw_str(frame, f"{round(1 / timeElapsed, 3)} frames/s", (20, 40))
+            self.imshow("debug", frame)
         
         if self.isStepped:
             k = cv2.waitKey(0) # waits infinitely for a keypress
@@ -104,9 +161,12 @@ Deal with frame after self.processFrame"""
             
         if k == ord("q"):
             self.stop()
-        if not self.isStepped and k == ord("p"):
-            cv2.waitKey(0) # waits infinitely for a keypress
-            
+        elif k == ord("p"):
+            self.isStepped = not self.isStepped
+        elif not self.isStepped and k == ord(" "):
+            k = cv2.waitKey(0) # waits infinitely for a keypress
+            if k == ord("q"):
+                self.stop()
     
     def push(self):
         """\
@@ -124,11 +184,6 @@ Prepare for self.processFrame"""
 :return: None
 
 Start capturing frames, calling self.processFrame, and display frames"""
-        try:
-            self.processFrame
-        except AttributeError:
-            raise NameError("requires a function self.processFrame(frame) which returns displayFrame")
-        
         while not self.stopped:
             t0 = clock() # start time
             frame = self.push()
@@ -144,6 +199,7 @@ destroy camera and opened windows when camera stream has ended"""
         self.stopped = True
         self.cap.release()
         cv2.destroyAllWindows()
+
 
 if __name__ == '__main__':
     # an example of how to use Handler
