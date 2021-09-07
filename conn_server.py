@@ -60,7 +60,7 @@ class StubConnServer:
         self.send("-"+str(n))
         
 if __name__ == "__main__":
-    jnr_server = ConnServer(SERVER_IP, SNRCONNECT_PORT)
+    jnr_server = ConnServer(SERVER_IP, JNRCONNECT_PORT)
     print("Finished!")
     
     while True: # included here to avoid the race condition of the program quitting before anything is actually sent
